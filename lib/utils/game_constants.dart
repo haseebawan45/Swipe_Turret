@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 class GameConstants {
   // Game mechanics
   static const double bulletSpeed = 400.0;
-  static const double bulletCooldown = 1.5;
+  static const double bulletCooldown = 0.3; // Faster cooldown for continuous shooting
   static const double missileSpeed = 80.0;
   static const double missileSpeedIncrease = 5.0;
   static const double missileSpawnRate = 2.0;
@@ -11,6 +11,7 @@ class GameConstants {
   static const double turretRadius = 20.0;
   static const double bulletRadius = 4.0;
   static const double missileRadius = 8.0;
+  static const double turretBottomMargin = 80.0; // Distance from bottom of screen
   
   // Visual constants
   static const double explosionDuration = 0.5;

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:math' as math;
 import '../utils/vector2d.dart';
+import '../utils/particle_pool.dart';
 
 /// Advanced neon glow effect painter
 class NeonGlowPainter extends CustomPainter {
@@ -73,6 +74,7 @@ class NeonParticle {
   double size;
   double rotation;
   double rotationSpeed;
+  bool isActive;
   
   NeonParticle({
     required this.position,
@@ -82,6 +84,7 @@ class NeonParticle {
     required this.size,
     this.rotation = 0.0,
     this.rotationSpeed = 0.0,
+    this.isActive = true,
   }) : life = maxLife;
 
   void update(double deltaTime) {
@@ -91,6 +94,11 @@ class NeonParticle {
     
     // Apply physics
     velocity = velocity * 0.98; // Drag
+    
+    // Update active state
+    if (life <= 0) {
+      isActive = false;
+    }
   }
 
   bool get isAlive => life > 0;
@@ -105,6 +113,28 @@ class NeonParticleSystem {
     particles.add(particle);
   }
   
+  // Helper method to create a particle using the pool
+  void addPooledParticle({
+    required Vector2D position,
+    required Vector2D velocity,
+    required double maxLife,
+    required Color color,
+    required double size,
+    double rotation = 0.0,
+    double rotationSpeed = 0.0,
+  }) {
+    final particle = ParticlePool().getParticle(
+      position: position,
+      velocity: velocity,
+      maxLife: maxLife,
+      color: color,
+      size: size,
+    );
+    particle.rotation = rotation;
+    particle.rotationSpeed = rotationSpeed;
+    particles.add(particle);
+  }
+  
   void addExplosion(Vector2D position, Color color, {int count = 15}) {
     final random = math.Random();
     
@@ -113,21 +143,21 @@ class NeonParticleSystem {
       final speed = 80 + random.nextDouble() * 120;
       final velocity = Vector2D.fromAngle(angle, speed);
       
-      particles.add(NeonParticle(
+      addPooledParticle(
         position: Vector2D.copy(position),
         velocity: velocity,
         maxLife: 0.4 + random.nextDouble() * 0.6,
         color: color,
         size: 2 + random.nextDouble() * 4,
         rotationSpeed: (random.nextDouble() - 0.5) * 10,
-      ));
+      );
     }
   }
   
   void addTrail(Vector2D position, Vector2D velocity, Color color) {
     final random = math.Random();
     
-    particles.add(NeonParticle(
+    addPooledParticle(
       position: Vector2D.copy(position),
       velocity: velocity * 0.3 + Vector2D(
         (random.nextDouble() - 0.5) * 20,
@@ -136,13 +166,18 @@ class NeonParticleSystem {
       maxLife: 0.2 + random.nextDouble() * 0.3,
       color: color,
       size: 1 + random.nextDouble() * 2,
-    ));
+    );
   }
   
   void update(double deltaTime) {
     particles.removeWhere((particle) {
       particle.update(deltaTime);
-      return !particle.isAlive;
+      if (!particle.isAlive) {
+        // Return particle to pool
+        ParticlePool().releaseParticle(particle);
+        return true;
+      }
+      return false;
     });
   }
   

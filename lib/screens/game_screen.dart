@@ -3,11 +3,14 @@ import 'package:flutter/services.dart';
 import '../entities/turret.dart';
 import '../entities/bullet.dart';
 import '../entities/missile.dart';
+import '../entities/boss.dart';
 import '../entities/explosion.dart';
 import '../effects/neon_effects.dart';
 import '../utils/vector2d.dart';
 import '../utils/game_constants.dart';
 import '../utils/game_state.dart';
+import '../utils/bullet_pool.dart';
+import '../utils/particle_pool.dart';
 import 'main_menu_screen.dart';
 import 'dart:math' as math;
 
@@ -22,9 +25,10 @@ class _GameScreenState extends State<GameScreen>
     with TickerProviderStateMixin {
   late AnimationController _gameLoopController;
   late Turret turret;
-  Bullet? currentBullet;
+  List<Bullet> bullets = []; // List for multiple bullets
   List<Missile> missiles = [];
   List<Explosion> explosions = [];
+  bool showingBossMessage = false;
   
   double lastMissileSpawn = 0.0;
   double countdownTimer = 3.0;
@@ -60,12 +64,12 @@ class _GameScreenState extends State<GameScreen>
     GameConstants.updateScreenSize(screenSize);
     
     turret = Turret(
-      position: Vector2D(screenSize.width / 2, screenSize.height / 2),
+      position: Vector2D(screenSize.width / 2, screenSize.height - GameConstants.turretBottomMargin),
     );
     
     missiles.clear();
     explosions.clear();
-    currentBullet = null;
+    bullets.clear(); // Clear bullets list
     lastMissileSpawn = 0.0;
     countdownTimer = 3.0;
     isGameActive = false;
@@ -74,6 +78,9 @@ class _GameScreenState extends State<GameScreen>
   @override
   void dispose() {
     _gameLoopController.dispose();
+    // Clear bullet and particle pools when game is disposed
+    BulletPool().clear();
+    ParticlePool().clear();
     super.dispose();
   }
 
@@ -108,11 +115,19 @@ class _GameScreenState extends State<GameScreen>
     // Update turret
     turret.update(deltaTime);
     
-    // Update bullet
-    currentBullet?.update(deltaTime);
-    if (currentBullet?.isActive == false) {
-      currentBullet = null;
+    // Update bullets
+    for (final bullet in bullets) {
+      bullet.update(deltaTime);
     }
+    
+    // Remove inactive bullets and return them to the pool
+    bullets.removeWhere((bullet) {
+      if (!bullet.isActive) {
+        BulletPool().releaseBullet(bullet);
+        return true;
+      }
+      return false;
+    });
     
     // Spawn missiles
     lastMissileSpawn += deltaTime;
@@ -144,40 +159,19 @@ class _GameScreenState extends State<GameScreen>
     final random = math.Random();
     final screenSize = MediaQuery.of(context).size;
     
-    // Choose random edge
-    Vector2D spawnPosition;
-    final edge = random.nextInt(4);
-    
-    switch (edge) {
-      case 0: // Top
-        spawnPosition = Vector2D(
-          random.nextDouble() * screenSize.width,
-          -50,
-        );
-        break;
-      case 1: // Right
-        spawnPosition = Vector2D(
-          screenSize.width + 50,
-          random.nextDouble() * screenSize.height,
-        );
-        break;
-      case 2: // Bottom
-        spawnPosition = Vector2D(
-          random.nextDouble() * screenSize.width,
-          screenSize.height + 50,
-        );
-        break;
-      case 3: // Left
-        spawnPosition = Vector2D(
-          -50,
-          random.nextDouble() * screenSize.height,
-        );
-        break;
-      default:
-        spawnPosition = Vector2D(0, 0);
+    // Check if we should spawn a boss
+    if (GameState().isBossFight) {
+      _spawnBoss();
+      return;
     }
     
-    // Determine missile type based on game time and difficulty
+    // Spawn enemies only from the top
+    Vector2D spawnPosition = Vector2D(
+      random.nextDouble() * screenSize.width,
+      -50, // Slightly above the screen
+    );
+    
+    // Determine missile type based on current level
     MissileType missileType = _determineMissileType();
     double missileSpeed = _getMissileSpeed(missileType);
     
@@ -188,18 +182,49 @@ class _GameScreenState extends State<GameScreen>
       type: missileType,
     ));
   }
+  
+  void _spawnBoss() {
+    final screenSize = MediaQuery.of(context).size;
+    
+    // Spawn boss at the top center
+    Vector2D spawnPosition = Vector2D(
+      screenSize.width / 2,
+      -100, // Above the screen
+    );
+    
+    missiles.add(Boss(
+      position: spawnPosition,
+      targetPosition: turret.position,
+    ));
+    
+    // Show boss entrance message
+    _showBossMessage();
+  }
+  
+  void _showBossMessage() {
+    setState(() {
+      showingBossMessage = true;
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted) {
+          setState(() {
+            showingBossMessage = false;
+          });
+        }
+      });
+    });
+  }
 
   MissileType _determineMissileType() {
-    final gameTime = GameState().gameTime;
+    final level = GameState().currentLevel;
     final random = math.Random();
     
-    // Fast missiles appear after 30 seconds
-    if (gameTime > 30 && random.nextDouble() < 0.3) {
+    // Fast missiles appear from level 2
+    if (level >= 2 && random.nextDouble() < 0.3) {
       return MissileType.fast;
     }
     
-    // Heavy missiles appear after 60 seconds
-    if (gameTime > 60 && random.nextDouble() < 0.15) {
+    // Heavy missiles appear from level 3
+    if (level >= 3 && random.nextDouble() < 0.2) {
       return MissileType.heavy;
     }
     
@@ -216,14 +241,16 @@ class _GameScreenState extends State<GameScreen>
         return baseSpeed * 1.5;
       case MissileType.heavy:
         return baseSpeed * 0.7;
+      case MissileType.boss:
+        return baseSpeed * 0.5;
     }
   }
 
   void _checkCollisions() {
-    // Bullet vs Missiles
-    if (currentBullet != null) {
+    // Bullets vs Missiles
+    for (final bullet in bullets) {
       for (final missile in missiles) {
-        if (currentBullet!.checkCollision(missile.position, missile.radius)) {
+        if (bullet.isActive && bullet.checkCollision(missile.position, missile.radius)) {
           // Create explosion based on missile type
           final explosionType = missile.type == MissileType.heavy 
               ? ExplosionType.missile 
@@ -234,7 +261,7 @@ class _GameScreenState extends State<GameScreen>
           ));
           
           // Destroy bullet
-          currentBullet!.destroy();
+          bullet.destroy();
           
           // Handle missile damage (heavy missiles need 2 hits)
           missile.takeDamage();
@@ -274,25 +301,43 @@ class _GameScreenState extends State<GameScreen>
         return 150;
       case MissileType.heavy:
         return 200;
+      case MissileType.boss:
+        return 1000; // Boss gives more points
     }
   }
 
-  void _handleSwipe(DragEndDetails details) {
-    if (!isGameActive || !turret.canShoot || GameState().status != GameStatus.playing) {
+  void _handleDragUpdate(DragUpdateDetails details) {
+    if (!isGameActive || GameState().status != GameStatus.playing) {
       return;
     }
     
-    final velocity = details.velocity.pixelsPerSecond;
-    if (velocity.distance < 100) return; // Minimum swipe speed
-    
-    // Calculate direction from swipe
-    final direction = Vector2D(velocity.dx, velocity.dy).normalized();
-    
-    // Create bullet
-    currentBullet = Bullet(
+    // Update turret position horizontally
+    setState(() {
+      // Only move horizontally and stay at the same Y position
+      turret.position.x += details.delta.dx;
+      
+      // Keep turret within screen bounds
+      turret.position.x = turret.position.x.clamp(
+        turret.radius, 
+        GameConstants.screenWidth - turret.radius
+      );
+      
+      // Shoot bullet if cooldown allows
+      if (turret.canShoot) {
+        _shootBullet();
+      }
+    });
+  }
+
+  void _shootBullet() {
+    // Get bullet from pool shooting upward
+    final bullet = BulletPool().getBullet(
       position: Vector2D.copy(turret.position),
-      direction: direction,
+      direction: Vector2D(0, -1), // Always shoot straight up
     );
+    
+    // Add bullet to list
+    bullets.add(bullet);
     
     // Start turret cooldown
     turret.startCooldown();
@@ -348,11 +393,11 @@ class _GameScreenState extends State<GameScreen>
           children: [
             // Game canvas
             GestureDetector(
-              onPanEnd: _handleSwipe,
+              onPanUpdate: _handleDragUpdate,
               child: CustomPaint(
                 painter: GamePainter(
                   turret: turret,
-                  bullet: currentBullet,
+                  bullets: bullets, // Pass bullets list
                   missiles: missiles,
                   explosions: explosions,
                   gameState: GameState(),
@@ -372,6 +417,10 @@ class _GameScreenState extends State<GameScreen>
             // Pause Screen
             if (GameState().status == GameStatus.paused)
               _buildPauseScreen(),
+              
+            // Boss message
+            if (showingBossMessage)
+              _buildBossMessage(),
           ],
         ),
       ),
@@ -438,13 +487,13 @@ class _GameScreenState extends State<GameScreen>
             
             const Spacer(),
             
-            // Bottom UI - Time and missiles destroyed
+            // Bottom UI - Level and enemies remaining
             if (isGameActive)
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  _buildStatContainer('TIME', GameState().formattedTime),
-                  _buildStatContainer('DESTROYED', '${GameState().missilesDestroyed}'),
+                  _buildStatContainer('LEVEL', GameState().formattedLevel),
+                  _buildStatContainer('REMAIN', GameState().formattedEnemiesRemaining),
                 ],
               ),
           ],
@@ -621,6 +670,52 @@ class _GameScreenState extends State<GameScreen>
       ),
     );
   }
+  
+  Widget _buildBossMessage() {
+    return Container(
+      width: double.infinity,
+      alignment: Alignment.center,
+      padding: const EdgeInsets.only(top: 100),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15),
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.7),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: GameConstants.missileColor,
+                width: 2,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: GameConstants.missileColor.withValues(alpha: 0.5),
+                  blurRadius: 15,
+                  spreadRadius: 2,
+                ),
+              ],
+            ),
+            child: Text(
+              'LEVEL ${GameState().currentLevel} BOSS',
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 28,
+                fontWeight: FontWeight.bold,
+                shadows: [
+                  Shadow(
+                    color: GameConstants.missileColor,
+                    blurRadius: 10,
+                    offset: Offset(0, 0),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _buildGameOverButton(String text, VoidCallback onPressed) {
     return GestureDetector(
@@ -650,7 +745,7 @@ class _GameScreenState extends State<GameScreen>
 
 class GamePainter extends CustomPainter {
   final Turret turret;
-  final Bullet? bullet;
+  final List<Bullet> bullets;
   final List<Missile> missiles;
   final List<Explosion> explosions;
   final GameState gameState;
@@ -659,7 +754,7 @@ class GamePainter extends CustomPainter {
 
   GamePainter({
     required this.turret,
-    required this.bullet,
+    required this.bullets,
     required this.missiles,
     required this.explosions,
     required this.gameState,
@@ -689,8 +784,10 @@ class GamePainter extends CustomPainter {
         missile.render(canvas, size);
       }
       
-      // Draw bullet
-      bullet?.render(canvas, size);
+      // Draw bullets
+      for (final bullet in bullets) {
+        bullet.render(canvas, size);
+      }
       
       // Draw turret
       turret.render(canvas, size);

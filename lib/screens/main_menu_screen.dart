@@ -198,7 +198,7 @@ class _MainMenuScreenState extends State<MainMenuScreen>
                           ),
                         ),
                         child: const Text(
-                          'SWIPE to shoot bullets\nDestroy incoming missiles\nSurvive as long as possible',
+                          'DRAG turret to move horizontally\nTouch and hold to shoot continuously\nDestroy enemies and advance levels\nDefeat bosses to progress',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             color: Colors.white70,

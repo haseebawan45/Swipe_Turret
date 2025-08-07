@@ -8,6 +8,7 @@ enum MissileType {
   standard,
   fast,
   heavy,
+  boss,
 }
 
 class Missile {
@@ -110,6 +111,8 @@ class Missile {
         return Colors.white;
       case MissileType.heavy:
         return Colors.purple;
+      case MissileType.boss:
+        return Colors.red;
     }
   }
 
@@ -121,6 +124,8 @@ class Missile {
         return const Color(0xFFFFFFFF);
       case MissileType.heavy:
         return const Color(0xFF8000FF);
+      case MissileType.boss:
+        return const Color(0xFFFF0000);
     }
   }
 
@@ -346,6 +351,11 @@ class Missile {
         }
         path.close();
         break;
+        
+      case MissileType.boss:
+        // Boss shape (handled in the Boss class)
+        path.addOval(Rect.fromCircle(center: Offset.zero, radius: radius));
+        break;
     }
     
     return path;
@@ -377,6 +387,10 @@ class Missile {
       case MissileType.standard:
         // Standard pulsing effect
         _drawPulsingEffect(canvas);
+        break;
+        
+      case MissileType.boss:
+        // Boss-specific effects are handled in the Boss class
         break;
     }
   }
