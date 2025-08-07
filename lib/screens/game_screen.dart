@@ -4,6 +4,7 @@ import '../entities/turret.dart';
 import '../entities/bullet.dart';
 import '../entities/missile.dart';
 import '../entities/explosion.dart';
+import '../effects/neon_effects.dart';
 import '../utils/vector2d.dart';
 import '../utils/game_constants.dart';
 import '../utils/game_state.dart';
@@ -176,11 +177,46 @@ class _GameScreenState extends State<GameScreen>
         spawnPosition = Vector2D(0, 0);
     }
     
+    // Determine missile type based on game time and difficulty
+    MissileType missileType = _determineMissileType();
+    double missileSpeed = _getMissileSpeed(missileType);
+    
     missiles.add(Missile(
       position: spawnPosition,
       targetPosition: turret.position,
-      speed: GameState().currentMissileSpeed,
+      speed: missileSpeed,
+      type: missileType,
     ));
+  }
+
+  MissileType _determineMissileType() {
+    final gameTime = GameState().gameTime;
+    final random = math.Random();
+    
+    // Fast missiles appear after 30 seconds
+    if (gameTime > 30 && random.nextDouble() < 0.3) {
+      return MissileType.fast;
+    }
+    
+    // Heavy missiles appear after 60 seconds
+    if (gameTime > 60 && random.nextDouble() < 0.15) {
+      return MissileType.heavy;
+    }
+    
+    return MissileType.standard;
+  }
+
+  double _getMissileSpeed(MissileType type) {
+    final baseSpeed = GameState().currentMissileSpeed;
+    
+    switch (type) {
+      case MissileType.standard:
+        return baseSpeed;
+      case MissileType.fast:
+        return baseSpeed * 1.5;
+      case MissileType.heavy:
+        return baseSpeed * 0.7;
+    }
   }
 
   void _checkCollisions() {
@@ -188,15 +224,24 @@ class _GameScreenState extends State<GameScreen>
     if (currentBullet != null) {
       for (final missile in missiles) {
         if (currentBullet!.checkCollision(missile.position, missile.radius)) {
-          // Create explosion
-          explosions.add(Explosion(position: Vector2D.copy(missile.position)));
+          // Create explosion based on missile type
+          final explosionType = missile.type == MissileType.heavy 
+              ? ExplosionType.missile 
+              : ExplosionType.bullet;
+          explosions.add(Explosion(
+            position: Vector2D.copy(missile.position),
+            type: explosionType,
+          ));
           
-          // Destroy bullet and missile
+          // Destroy bullet
           currentBullet!.destroy();
-          missile.destroy();
           
-          // Add score
-          GameState().addScore(100);
+          // Handle missile damage (heavy missiles need 2 hits)
+          missile.takeDamage();
+          
+          // Add score based on missile type
+          int scoreValue = _getScoreValue(missile.type);
+          GameState().addScore(scoreValue);
           
           // Play sound effect (if implemented)
           _playExplosionSound();
@@ -209,12 +254,26 @@ class _GameScreenState extends State<GameScreen>
     // Missiles vs Turret
     for (final missile in missiles) {
       if (missile.checkCollision(turret.position, turret.radius)) {
-        // Game over
-        explosions.add(Explosion(position: Vector2D.copy(turret.position)));
+        // Game over explosion
+        explosions.add(Explosion(
+          position: Vector2D.copy(turret.position),
+          type: ExplosionType.turret,
+        ));
         GameState().gameOver();
         _playGameOverSound();
         break;
       }
+    }
+  }
+
+  int _getScoreValue(MissileType type) {
+    switch (type) {
+      case MissileType.standard:
+        return 100;
+      case MissileType.fast:
+        return 150;
+      case MissileType.heavy:
+        return 200;
     }
   }
 
@@ -336,10 +395,10 @@ class _GameScreenState extends State<GameScreen>
                     vertical: 8,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.5),
+                    color: Colors.black.withValues(alpha: 0.5),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(
-                      color: GameConstants.uiColor.withOpacity(0.5),
+                      color: GameConstants.uiColor.withValues(alpha: 0.5),
                       width: 1,
                     ),
                   ),
@@ -360,10 +419,10 @@ class _GameScreenState extends State<GameScreen>
                     child: Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.5),
+                        color: Colors.black.withValues(alpha: 0.5),
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(
-                          color: GameConstants.uiColor.withOpacity(0.5),
+                          color: GameConstants.uiColor.withValues(alpha: 0.5),
                           width: 1,
                         ),
                       ),
@@ -398,10 +457,10 @@ class _GameScreenState extends State<GameScreen>
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 8),
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.5),
+        color: Colors.black.withValues(alpha: 0.5),
         borderRadius: BorderRadius.circular(15),
         border: Border.all(
-          color: GameConstants.uiColor.withOpacity(0.3),
+          color: GameConstants.uiColor.withValues(alpha: 0.3),
           width: 1,
         ),
       ),
@@ -430,7 +489,7 @@ class _GameScreenState extends State<GameScreen>
 
   Widget _buildGameOverScreen() {
     return Container(
-      color: Colors.black.withOpacity(0.8),
+      color: Colors.black.withValues(alpha: 0.8),
       child: Center(
         child: Container(
           margin: const EdgeInsets.all(40),
@@ -444,7 +503,7 @@ class _GameScreenState extends State<GameScreen>
             ),
             boxShadow: [
               BoxShadow(
-                color: GameConstants.uiColor.withOpacity(0.3),
+                color: GameConstants.uiColor.withValues(alpha: 0.3),
                 blurRadius: 20,
                 spreadRadius: 5,
               ),
@@ -522,7 +581,7 @@ class _GameScreenState extends State<GameScreen>
 
   Widget _buildPauseScreen() {
     return Container(
-      color: Colors.black.withOpacity(0.8),
+      color: Colors.black.withValues(alpha: 0.8),
       child: Center(
         child: Container(
           margin: const EdgeInsets.all(40),
@@ -569,7 +628,7 @@ class _GameScreenState extends State<GameScreen>
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
         decoration: BoxDecoration(
-          color: GameConstants.uiColor.withOpacity(0.2),
+          color: GameConstants.uiColor.withValues(alpha: 0.2),
           borderRadius: BorderRadius.circular(15),
           border: Border.all(
             color: GameConstants.uiColor,
@@ -596,6 +655,7 @@ class GamePainter extends CustomPainter {
   final List<Explosion> explosions;
   final GameState gameState;
   final double countdownTimer;
+  late final CyberpunkGridPainter backgroundPainter;
 
   GamePainter({
     required this.turret,
@@ -604,12 +664,18 @@ class GamePainter extends CustomPainter {
     required this.explosions,
     required this.gameState,
     required this.countdownTimer,
-  });
+  }) {
+    backgroundPainter = CyberpunkGridPainter(
+      time: gameState.gameTime,
+      screenSize: Size(GameConstants.screenWidth, GameConstants.screenHeight),
+      intensity: gameState.status == GameStatus.playing ? 1.0 : 0.5,
+    );
+  }
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Draw animated background grid
-    _drawBackground(canvas, size);
+    // Draw stunning cyberpunk background
+    backgroundPainter.paint(canvas, size);
     
     // Draw game entities only if game is active
     if (gameState.status == GameStatus.playing || gameState.status == GameStatus.paused) {
@@ -632,69 +698,8 @@ class GamePainter extends CustomPainter {
       // Draw turret during countdown
       turret.render(canvas, size);
       
-      // Draw countdown
+      // Draw countdown with neon effects
       _drawCountdown(canvas, size);
-    }
-  }
-
-  void _drawBackground(Canvas canvas, Size size) {
-    // Draw subtle grid pattern
-    final gridPaint = Paint()
-      ..color = GameConstants.gridColor.withOpacity(0.2)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 0.5;
-
-    const gridSize = 40.0;
-    
-    // Vertical lines
-    for (double x = 0; x <= size.width; x += gridSize) {
-      canvas.drawLine(
-        Offset(x, 0),
-        Offset(x, size.height),
-        gridPaint,
-      );
-    }
-    
-    // Horizontal lines
-    for (double y = 0; y <= size.height; y += gridSize) {
-      canvas.drawLine(
-        Offset(0, y),
-        Offset(size.width, y),
-        gridPaint,
-      );
-    }
-
-    // Draw center crosshair
-    final crosshairPaint = Paint()
-      ..color = GameConstants.turretColor.withOpacity(0.3)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.0;
-
-    final center = Offset(size.width / 2, size.height / 2);
-    const crosshairSize = 30.0;
-
-    canvas.drawLine(
-      Offset(center.dx - crosshairSize, center.dy),
-      Offset(center.dx + crosshairSize, center.dy),
-      crosshairPaint,
-    );
-    
-    canvas.drawLine(
-      Offset(center.dx, center.dy - crosshairSize),
-      Offset(center.dx, center.dy + crosshairSize),
-      crosshairPaint,
-    );
-
-    // Draw concentric circles around center
-    for (int i = 1; i <= 3; i++) {
-      canvas.drawCircle(
-        center,
-        i * 60.0,
-        Paint()
-          ..color = GameConstants.turretColor.withOpacity(0.1)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.0,
-      );
     }
   }
 
@@ -702,17 +707,60 @@ class GamePainter extends CustomPainter {
     final countdownNumber = countdownTimer.ceil();
     if (countdownNumber <= 0) return;
 
-    final textPainter = TextPainter(
+    final center = Offset(size.width / 2, size.height / 2);
+    
+    // Draw multiple glow layers for the countdown number
+    final glowLayers = [
+      (150.0, 0.1), // Outer glow
+      (120.0, 0.2), // Mid glow  
+      (100.0, 0.4), // Inner glow
+    ];
+
+    for (final layer in glowLayers) {
+      final textPainter = TextPainter(
+        text: TextSpan(
+          text: countdownNumber.toString(),
+          style: TextStyle(
+            color: GameConstants.uiColor.withValues(alpha: layer.$2),
+            fontSize: layer.$1,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      );
+
+      textPainter.layout();
+      
+      final textCenter = Offset(
+        (size.width - textPainter.width) / 2,
+        (size.height - textPainter.height) / 2,
+      );
+
+      // Draw pulsing effect
+      final scale = 1.0 + (1.0 - (countdownTimer % 1.0)) * 0.3;
+      
+      canvas.save();
+      canvas.translate(textCenter.dx + textPainter.width / 2, textCenter.dy + textPainter.height / 2);
+      canvas.scale(scale);
+      canvas.translate(-textPainter.width / 2, -textPainter.height / 2);
+      
+      textPainter.paint(canvas, Offset.zero);
+      
+      canvas.restore();
+    }
+
+    // Draw main countdown number
+    final mainTextPainter = TextPainter(
       text: TextSpan(
         text: countdownNumber.toString(),
         style: TextStyle(
-          color: GameConstants.uiColor,
+          color: Colors.white,
           fontSize: 120,
           fontWeight: FontWeight.bold,
           shadows: [
             Shadow(
-              blurRadius: 20.0,
-              color: GameConstants.uiColor.withOpacity(0.8),
+              blurRadius: 30.0,
+              color: GameConstants.uiColor.withValues(alpha: 0.8),
               offset: const Offset(0, 0),
             ),
           ],
@@ -721,24 +769,36 @@ class GamePainter extends CustomPainter {
       textDirection: TextDirection.ltr,
     );
 
-    textPainter.layout();
+    mainTextPainter.layout();
     
-    final center = Offset(
-      (size.width - textPainter.width) / 2,
-      (size.height - textPainter.height) / 2,
+    final mainCenter = Offset(
+      (size.width - mainTextPainter.width) / 2,
+      (size.height - mainTextPainter.height) / 2,
     );
 
-    // Draw pulsing effect
-    final scale = 1.0 + (1.0 - (countdownTimer % 1.0)) * 0.2;
+    // Draw pulsing effect for main text
+    final mainScale = 1.0 + (1.0 - (countdownTimer % 1.0)) * 0.2;
     
     canvas.save();
-    canvas.translate(center.dx + textPainter.width / 2, center.dy + textPainter.height / 2);
-    canvas.scale(scale);
-    canvas.translate(-textPainter.width / 2, -textPainter.height / 2);
+    canvas.translate(mainCenter.dx + mainTextPainter.width / 2, mainCenter.dy + mainTextPainter.height / 2);
+    canvas.scale(mainScale);
+    canvas.translate(-mainTextPainter.width / 2, -mainTextPainter.height / 2);
     
-    textPainter.paint(canvas, Offset.zero);
+    mainTextPainter.paint(canvas, Offset.zero);
     
     canvas.restore();
+
+    // Draw energy rings around countdown
+    final ringPaint = Paint()
+      ..color = GameConstants.uiColor.withValues(alpha: 0.4)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3.0
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.0);
+
+    for (int i = 1; i <= 3; i++) {
+      final ringRadius = 80 + i * 30 + 10 * math.sin(gameState.gameTime * 4 + i);
+      canvas.drawCircle(center, ringRadius, ringPaint);
+    }
   }
 
   @override

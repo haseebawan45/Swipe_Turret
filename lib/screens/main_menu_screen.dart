@@ -144,13 +144,13 @@ class _MainMenuScreenState extends State<MainMenuScreen>
                         ),
                         decoration: BoxDecoration(
                           border: Border.all(
-                            color: GameConstants.uiColor.withOpacity(0.5),
+                            color: GameConstants.uiColor.withValues(alpha: 0.5),
                             width: 2,
                           ),
                           borderRadius: BorderRadius.circular(10),
                           boxShadow: [
                             BoxShadow(
-                              color: GameConstants.uiColor.withOpacity(0.3),
+                              color: GameConstants.uiColor.withValues(alpha: 0.3),
                               blurRadius: 10,
                               spreadRadius: 2,
                             ),
@@ -190,7 +190,7 @@ class _MainMenuScreenState extends State<MainMenuScreen>
                         margin: const EdgeInsets.symmetric(horizontal: 20),
                         padding: const EdgeInsets.all(15),
                         decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.3),
+                          color: Colors.black.withValues(alpha: 0.3),
                           borderRadius: BorderRadius.circular(10),
                           border: Border.all(
                             color: GameConstants.gridColor,
@@ -227,8 +227,8 @@ class _MainMenuScreenState extends State<MainMenuScreen>
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [
-            color.withOpacity(0.8),
-            color.withOpacity(0.6),
+            color.withValues(alpha: 0.8),
+            color.withValues(alpha: 0.6),
           ],
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
@@ -236,7 +236,7 @@ class _MainMenuScreenState extends State<MainMenuScreen>
         borderRadius: BorderRadius.circular(30),
         boxShadow: [
           BoxShadow(
-            color: color.withOpacity(0.5),
+            color: color.withValues(alpha: 0.5),
             blurRadius: 15,
             spreadRadius: 2,
           ),
@@ -283,7 +283,7 @@ class BackgroundPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = GameConstants.gridColor.withOpacity(0.3)
+      ..color = GameConstants.gridColor.withValues(alpha: 0.3)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.0;
 
@@ -315,7 +315,7 @@ class BackgroundPainter extends CustomPainter {
 
     // Draw pulsing circles
     final circlePaint = Paint()
-      ..color = GameConstants.turretColor.withOpacity(0.1)
+      ..color = GameConstants.turretColor.withValues(alpha: 0.1)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.0;
 

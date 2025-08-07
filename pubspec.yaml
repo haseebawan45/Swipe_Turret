@@ -39,6 +39,10 @@ dependencies:
   shared_preferences: ^2.2.2
   audioplayers: ^5.2.1
   vector_math: ^2.1.4
+  
+  # Advanced graphics and effects
+  flame: ^1.18.0
+  rive: ^0.13.1
 
 dev_dependencies:
   flutter_test:
